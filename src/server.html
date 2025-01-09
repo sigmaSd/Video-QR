@@ -108,6 +108,7 @@
         let wakeLock = null;
         let cycleInterval;
         let cycleSpeed = 1000;
+        let isGenerating = true;
 
         async function keepScreenAwake() {
             try {
@@ -120,8 +121,11 @@
         }
 
         const CHUNK_SIZE = 1000;
+        const worker = new Worker('qrworker.js');
+        let completedChunks = 0;
 
         async function handleFileSelect(event) {
+            isGenerating = true;
             const file = event.target.files[0];
             if (!file) return;
 
@@ -135,27 +139,54 @@
                 qrContainer.innerHTML = '';
 
                 const fileBuffer = await file.arrayBuffer();
-                status.textContent = 'Generating QR codes...';
-
                 const chunks = splitFile(fileBuffer);
                 status.textContent = `Creating ${chunks.length} QR codes...`;
 
-                // Add total parts QR
-                const totalPartsQr = generateQR(`VIDEO QR TOTAL PARTS = ${chunks.length}`);
-                qrContainer.appendChild(createQRElement(totalPartsQr));
+                completedChunks = 0;
 
-                // Generate QR for each chunk
-                chunks.forEach((chunk, index) => {
-                    const prefixedChunk = new Uint8Array([index, ...chunk]);
-                    const qr = generateQR(arrayBufferToBase64(prefixedChunk));
-                    qrContainer.appendChild(createQRElement(qr));
+                worker.onmessage = function(e) {
+                    const { type, qr, index } = e.data;
+
+                    if (type === 'TOTAL') {
+                        const div = document.createElement('div');
+                        div.className = 'qr-code';
+                        div.style.display = 'none';
+                        div.innerHTML = qr;
+                        qrContainer.appendChild(div);
+                    } else {
+                        const div = document.createElement('div');
+                        div.className = 'qr-code';
+                        div.style.display = 'none';
+                        div.innerHTML = qr;
+                        qrContainer.appendChild(div);
+
+                        completedChunks++;
+                        const progress = Math.round((completedChunks / chunks.length) * 100);
+                        status.textContent = `Generated ${completedChunks}/${chunks.length} QR codes (${progress}%)`;
+
+                        if (completedChunks === chunks.length) {
+                            spinner.style.display = 'none';
+                            status.textContent = `Displaying ${chunks.length} QR codes`;
+                            isGenerating = false;
+                            startQRCycle();
+                            keepScreenAwake();
+                            worker.onmessage = null;
+                        }
+                    }
+                };
+
+                worker.postMessage({
+                    type: 'TOTAL',
+                    chunks: chunks.length
                 });
 
-                status.textContent = `Displaying ${chunks.length} QR codes`;
-                spinner.style.display = 'none';
-
-                startQRCycle();
-                keepScreenAwake();
+                chunks.forEach((chunk, index) => {
+                    worker.postMessage({
+                        type: 'CHUNK',
+                        chunks: chunk,
+                        index: index
+                    });
+                });
 
             } catch (error) {
                 status.textContent = 'Error: ' + error.message;
@@ -173,23 +204,10 @@
             return chunks;
         }
 
-        function generateQR(data) {
-            const qr = qrcode(0, 'L');
-            qr.addData(data);
-            qr.make();
-            return qr;
-        }
-
-        function createQRElement(qr) {
-            const div = document.createElement('div');
-            div.className = 'qr-code';
-            div.style.display = 'none';
-            div.innerHTML = qr.createImgTag();
-            return div;
-        }
-
         function startQRCycle() {
             const qrs = document.querySelectorAll('.qr-code');
+            if (qrs.length === 0 || isGenerating) return;
+
             let currentIndex = 0;
 
             if (cycleInterval) {
@@ -203,14 +221,10 @@
             }, cycleSpeed);
         }
 
-        function arrayBufferToBase64(buffer) {
-            const bytes = new Uint8Array(buffer);
-            return btoa(String.fromCharCode.apply(null, bytes));
-        }
-
         window.addEventListener('beforeunload', () => {
             if (wakeLock) wakeLock.release();
             if (cycleInterval) clearInterval(cycleInterval);
+            worker.terminate();
         });
 
         document.getElementById('fileInput').addEventListener('change', handleFileSelect);
