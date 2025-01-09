@@ -21,15 +21,15 @@
         height: 100vh;
         display: flex;
         flex-direction: column;
-        position: relative; /* Add this */
+        position: relative;
     }
 
     .controls {
         padding: 10px;
         gap: 10px;
         display: flex;
-        background: white; /* Add this */
-        z-index: 1; /* Add this */
+        background: white;
+        z-index: 1;
     }
 
     #video {
@@ -39,14 +39,14 @@
     }
 
     #status {
-        position: fixed; /* Change this */
-        bottom: 0; /* Add this */
-        left: 0; /* Add this */
-        right: 0; /* Add this */
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
         padding: 15px;
-        background: rgba(240, 240, 240, 0.9); /* Semi-transparent */
-        z-index: 1; /* Add this */
-        text-align: center; /* Add this */
+        background: rgba(240, 240, 240, 0.9);
+        z-index: 1;
+        text-align: center;
     }
 
     .btn {
@@ -65,6 +65,7 @@
     <div class="container">
         <div class="controls">
             <button class="btn" onclick="switchCamera()">Switch Camera</button>
+            <button class="btn" onclick="startNewScan()">Scan Again</button>
             <button class="btn" onclick="location.href='index.html'">Back</button>
         </div>
         <video id="video"></video>
@@ -79,6 +80,17 @@
         let currentCamera = 0;
         let videoDevices = [];
         let wakeLock = null;
+
+        function startNewScan() {
+            scannedParts.clear();
+            totalParts = null;
+            scanning = true;
+            document.getElementById('status').textContent = 'Scanning...';
+            if (codeReader) {
+                codeReader.reset();
+                startScanning();
+            }
+        }
 
         async function initializeCamera() {
             try {
@@ -106,14 +118,23 @@
 
         async function startScanning() {
             try {
-                const selectedDeviceId = videoDevices[currentCamera].deviceId;
+                // Find front camera if available
+                const frontCamera = videoDevices.find(device =>
+                    device.label.toLowerCase().includes('front') ||
+                    device.label.toLowerCase().includes('facing')
+                );
+
+                // Use front camera if found, otherwise use first available
+                const selectedDeviceId = frontCamera ? frontCamera.deviceId : videoDevices[0].deviceId;
+                currentCamera = videoDevices.findIndex(d => d.deviceId === selectedDeviceId);
+
                 codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
                     if (result && scanning) {
                         handleQRCode(result.text);
                     }
                 });
             } catch (err) {
-                console.error(err);
+                console.error('Scanning error:', err);
             }
         }
 
@@ -138,7 +159,7 @@
 
                 if (!scannedParts.has(index)) {
                     scannedParts.set(index, content);
-                    updateStatus(); // Make sure to call updateStatus here
+                    updateStatus();
                 }
 
                 if (totalParts && scannedParts.size === totalParts) {
@@ -158,13 +179,6 @@
                 status.textContent = `Progress: ${scannedParts.size}/${totalParts} parts (${progress}%)`;
             } else {
                 status.textContent = `Scanned ${scannedParts.size} parts. Waiting for total...`;
-            }
-        }
-
-        function updateStatus() {
-            const status = document.getElementById('status');
-            if (totalParts) {
-                status.textContent = `Scanned ${scannedParts.size} of ${totalParts} parts`;
             }
         }
 

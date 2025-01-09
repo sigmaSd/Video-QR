@@ -80,6 +80,22 @@
 
         .loading-spinner {
             text-align: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007AFF;
+            border-radius: 50%;
+            margin: 0 auto 10px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
@@ -99,16 +115,27 @@
 
         <div class="qr-display" id="qrContainer">
             <div class="loading-spinner" id="loadingSpinner" style="display: none">
+                <div class="spinner"></div>
                 <div>Processing file...</div>
             </div>
         </div>
     </div>
 
     <script>
+        const fileInput = document.getElementById('fileInput');
+        const status = document.getElementById('status');
+        const spinner = document.getElementById('loadingSpinner');
+        const qrContainer = document.getElementById('qrContainer');
+        const speedSlider = document.getElementById('speedSlider');
+        const speedValue = document.getElementById('speedValue');
+
         let wakeLock = null;
         let cycleInterval;
         let cycleSpeed = 1000;
         let isGenerating = true;
+        let currentWorker = null;
+        const CHUNK_SIZE = 1000;
+        let completedChunks = 0;
 
         async function keepScreenAwake() {
             try {
@@ -120,18 +147,17 @@
             }
         }
 
-        const CHUNK_SIZE = 1000;
-        const worker = new Worker('qrworker.js');
-        let completedChunks = 0;
-
         async function handleFileSelect(event) {
+            if (currentWorker) {
+                currentWorker.terminate();
+            }
+            if (cycleInterval) {
+                clearInterval(cycleInterval);
+            }
+
             isGenerating = true;
             const file = event.target.files[0];
             if (!file) return;
-
-            const status = document.getElementById('status');
-            const spinner = document.getElementById('loadingSpinner');
-            const qrContainer = document.getElementById('qrContainer');
 
             try {
                 status.textContent = 'Reading file...';
@@ -143,8 +169,9 @@
                 status.textContent = `Creating ${chunks.length} QR codes...`;
 
                 completedChunks = 0;
+                currentWorker = new Worker('qrworker.js');
 
-                worker.onmessage = function(e) {
+                currentWorker.onmessage = function(e) {
                     const { type, qr, index } = e.data;
 
                     if (type === 'TOTAL') {
@@ -170,18 +197,19 @@
                             isGenerating = false;
                             startQRCycle();
                             keepScreenAwake();
-                            worker.onmessage = null;
+                            currentWorker.terminate();
+                            currentWorker = null;
                         }
                     }
                 };
 
-                worker.postMessage({
+                currentWorker.postMessage({
                     type: 'TOTAL',
                     chunks: chunks.length
                 });
 
                 chunks.forEach((chunk, index) => {
-                    worker.postMessage({
+                    currentWorker.postMessage({
                         type: 'CHUNK',
                         chunks: chunk,
                         index: index
@@ -191,6 +219,11 @@
             } catch (error) {
                 status.textContent = 'Error: ' + error.message;
                 spinner.style.display = 'none';
+                isGenerating = false;
+                if (currentWorker) {
+                    currentWorker.terminate();
+                    currentWorker = null;
+                }
             }
         }
 
@@ -224,15 +257,15 @@
         window.addEventListener('beforeunload', () => {
             if (wakeLock) wakeLock.release();
             if (cycleInterval) clearInterval(cycleInterval);
-            worker.terminate();
+            if (currentWorker) currentWorker.terminate();
         });
 
-        document.getElementById('fileInput').addEventListener('change', handleFileSelect);
-        document.getElementById('speedSlider').addEventListener('input', (e) => {
+        fileInput.addEventListener('change', handleFileSelect);
+        speedSlider.addEventListener('input', (e) => {
             cycleSpeed = parseInt(e.target.value);
-            document.getElementById('speedValue').textContent = (cycleSpeed/1000).toFixed(1) + 's';
+            speedValue.textContent = (cycleSpeed/1000).toFixed(1) + 's';
             startQRCycle();
         });
-    </script>
+  </script>
 </body>
 </html>

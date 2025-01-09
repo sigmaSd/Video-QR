@@ -6,5 +6,5 @@ Deno.serve((req) => {
   if (path === "/") {
     return serveFile(req, "src/index.html");
   }
-  return serveFile(req, "src/" + path.slice(1)); // remove leading slash
+  return serveFile(req, "src/" + path.slice(1));
 });
