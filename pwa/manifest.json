@@ -1,0 +1,13 @@
+{
+  "name": "Video QR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "icons": [
+    {
+      "src": "/pwa/favicon.png",
+      "type": "image/png",
+      "sizes": "256x256"
+    }
+  ]
+}
