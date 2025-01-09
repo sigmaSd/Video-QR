@@ -1,4 +1,4 @@
-# VideoQr
+# Video QR
 
 Transfer files via QR code sequences by splitting them into multiple QR codes that cycle on screen.
 
