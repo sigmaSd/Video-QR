@@ -49,7 +49,7 @@
 
         async function initializeCamera() {
             try {
-                videoDevices = await ZXing.BrowserCodeReader.listVideoInputDevices();
+                videoDevices = await (new ZXing.BrowserCodeReader()).listVideoInputDevices();
                 startScanning();
             } catch (err) {
                 console.error('Camera init error:', err);
