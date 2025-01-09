@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VideoQr Server</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator"></script>
+    <style>
+        .qr-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 20px;
+        }
+        .qr-code {
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+        #fileInput {
+            margin: 20px;
+        }
+    </style>
+</head>
+<body>
+    <input type="file" id="fileInput">
+    <div class="qr-container" id="qrContainer"></div>
+
+    <script>
+        const CHUNK_SIZE = 1000; // Adjust based on QR capacity needs
+
+        async function handleFileSelect(event) {
+            const file = event.target.files[0];
+            const fileBuffer = await file.arrayBuffer();
+            const chunks = splitFile(fileBuffer);
+
+            // Create QR codes for each chunk
+            const qrContainer = document.getElementById('qrContainer');
+            qrContainer.innerHTML = '';
+
+            // Add total parts QR
+            const totalPartsQr = generateQR(`VIDEO QR TOTAL PARTS = ${chunks.length}`);
+            qrContainer.appendChild(createQRElement(totalPartsQr));
+
+            // Generate QR for each chunk
+            chunks.forEach((chunk, index) => {
+                const prefixedChunk = new Uint8Array([index, ...chunk]);
+                const qr = generateQR(arrayBufferToBase64(prefixedChunk));
+                qrContainer.appendChild(createQRElement(qr));
+            });
+
+            // Start cycling through QRs
+            startQRCycle();
+        }
+
+        function splitFile(buffer) {
+            const chunks = [];
+            const data = new Uint8Array(buffer);
+
+            for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+                chunks.push(data.slice(i, i + CHUNK_SIZE));
+            }
+            return chunks;
+        }
+
+        function generateQR(data) {
+            const qr = qrcode(0, 'L');
+            qr.addData(data);
+            qr.make();
+            return qr;
+        }
+
+        function createQRElement(qr) {
+            const div = document.createElement('div');
+            div.className = 'qr-code';
+            div.style.display = 'none';
+            div.innerHTML = qr.createImgTag();
+            return div;
+        }
+
+        function startQRCycle() {
+            const qrs = document.querySelectorAll('.qr-code');
+            let currentIndex = 0;
+
+            setInterval(() => {
+                qrs.forEach(qr => qr.style.display = 'none');
+                qrs[currentIndex].style.display = 'block';
+                currentIndex = (currentIndex + 1) % qrs.length;
+            }, 1000); // Change QR every second
+        }
+
+        function arrayBufferToBase64(buffer) {
+            const bytes = new Uint8Array(buffer);
+            return btoa(String.fromCharCode.apply(null, bytes));
+        }
+
+        document.getElementById('fileInput').addEventListener('change', handleFileSelect);
+    </script>
+</body>
+</html>

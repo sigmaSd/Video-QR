@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VideoQr Client</title>
+    <script src="https://unpkg.com/@zxing/library@latest"></script>
+    <style>
+        #video {
+            width: 100%;
+            max-width: 640px;
+        }
+        #status {
+            margin: 20px;
+            padding: 10px;
+            background: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <video id="video"></video>
+    <div id="status">Scanning...</div>
+
+    <script>
+        let codeReader = new ZXing.BrowserQRCodeReader();
+        let scannedParts = new Map();
+        let totalParts = null;
+        let scanning = true;
+
+        async function startScanning() {
+            try {
+                const videoInputDevices = await (new ZXing.BrowserCodeReader()).listVideoInputDevices();
+                const selectedDeviceId = videoInputDevices[0].deviceId;
+
+                codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
+                    if (result && scanning) {
+                        handleQRCode(result.text);
+                    }
+                });
+
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function handleQRCode(data) {
+            if (data.startsWith('VIDEO QR TOTAL PARTS = ')) {
+                totalParts = parseInt(data.split('= ')[1]);
+                updateStatus();
+                return;
+            }
+
+            try {
+                const binaryData = atob(data);
+                const bytes = new Uint8Array(binaryData.length);
+                for (let i = 0; i < binaryData.length; i++) {
+                    bytes[i] = binaryData.charCodeAt(i);
+                }
+
+                const index = bytes[0];
+                const content = bytes.slice(1);
+
+                if (!scannedParts.has(index)) {
+                    scannedParts.set(index, content);
+                    updateStatus();
+                }
+
+                if (totalParts && scannedParts.size === totalParts) {
+                    assembleAndDownload();
+                }
+            } catch (err) {
+                console.error('Error processing QR data:', err);
+            }
+        }
+
+        function updateStatus() {
+            const status = document.getElementById('status');
+            if (totalParts) {
+                status.textContent = `Scanned ${scannedParts.size} of ${totalParts} parts`;
+            }
+        }
+
+        function assembleAndDownload() {
+            scanning = false;
+
+            // Combine all parts in correct order
+            const sortedParts = Array.from(scannedParts.entries())
+                .sort((a, b) => a[0] - b[0])
+                .map(entry => entry[1]);
+
+            const finalBuffer = new Uint8Array(
+                sortedParts.reduce((total, part) => total + part.length, 0)
+            );
+
+            let offset = 0;
+            sortedParts.forEach(part => {
+                finalBuffer.set(part, offset);
+                offset += part.length;
+            });
+
+            // Create download link
+            const blob = new Blob([finalBuffer]);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'reconstructed_file';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        startScanning();
+    </script>
+</body>
+</html>
