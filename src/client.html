@@ -113,21 +113,28 @@
             }
             currentCamera = (currentCamera + 1) % videoDevices.length;
             await codeReader.reset();
-            startScanning();
+            const selectedDeviceId = videoDevices[currentCamera].deviceId;
+            codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
+                if (result && scanning) {
+                    handleQRCode(result.text);
+                }
+            });
         }
 
         async function startScanning() {
             try {
-                // Find front camera if available
-                const frontCamera = videoDevices.find(device =>
-                    device.label.toLowerCase().includes('front') ||
-                    device.label.toLowerCase().includes('facing')
-                );
+                // Only try to find front camera on initial start
+                if (currentCamera === 0) {
+                    const frontCamera = videoDevices.find(device =>
+                        device.label.toLowerCase().includes('front') ||
+                        device.label.toLowerCase().includes('facing')
+                    );
+                    if (frontCamera) {
+                        currentCamera = videoDevices.findIndex(d => d.deviceId === frontCamera.deviceId);
+                    }
+                }
 
-                // Use front camera if found, otherwise use first available
-                const selectedDeviceId = frontCamera ? frontCamera.deviceId : videoDevices[0].deviceId;
-                currentCamera = videoDevices.findIndex(d => d.deviceId === selectedDeviceId);
-
+                const selectedDeviceId = videoDevices[currentCamera].deviceId;
                 codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
                     if (result && scanning) {
                         handleQRCode(result.text);

@@ -29,6 +29,8 @@
             padding: 10px;
             gap: 10px;
             display: flex;
+            flex-wrap: wrap;
+            min-height: 60px;
         }
 
         .btn {
@@ -59,8 +61,8 @@
         }
 
         #status {
-            padding: 15px;
-            margin: 10px 0;
+            padding: 10px;
+            margin: 5px 0;
             background: #f0f0f0;
             border-radius: 6px;
         }
@@ -71,11 +73,22 @@
             justify-content: center;
             align-items: center;
             overflow: hidden;
+            padding: 10px;
+        }
+
+        .qr-code {
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
 
         .qr-code img {
-            max-width: 90vw;
+            max-height: calc(100vh - 150px);
+            max-width: 95vw;
+            width: auto;
             height: auto;
+            object-fit: contain;
         }
 
         .loading-spinner {
@@ -266,6 +279,6 @@
             speedValue.textContent = (cycleSpeed/1000).toFixed(1) + 's';
             startQRCycle();
         });
-  </script>
+    </script>
 </body>
 </html>
