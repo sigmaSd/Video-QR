@@ -4,7 +4,7 @@ Deno.serve((req) => {
   const url = req.url;
   const path = new URL(url).pathname;
   if (path === "/") {
-    return serveFile(req, "index.html");
+    return serveFile(req, "src/index.html");
   }
-  return serveFile(req, path.slice(1)); // remove leading slash
+  return serveFile(req, "src/" + path.slice(1)); // remove leading slash
 });
