@@ -3,30 +3,62 @@
 <head>
     <title>VideoQr Client</title>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        .container {
-            max-width: 640px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        #video {
-            width: 100%;
-            border: 1px solid #ccc;
-        }
-        .controls {
-            display: flex;
-            gap: 10px;
-            margin: 10px 0;
-        }
-        .btn {
-            padding: 10px;
-            cursor: pointer;
-        }
-        #status {
-            padding: 10px;
-            background: #f0f0f0;
-            margin-top: 10px;
-        }
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    body {
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden;
+    }
+
+    .container {
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        position: relative; /* Add this */
+    }
+
+    .controls {
+        padding: 10px;
+        gap: 10px;
+        display: flex;
+        background: white; /* Add this */
+        z-index: 1; /* Add this */
+    }
+
+    #video {
+        flex: 1;
+        width: 100%;
+        object-fit: cover;
+    }
+
+    #status {
+        position: fixed; /* Change this */
+        bottom: 0; /* Add this */
+        left: 0; /* Add this */
+        right: 0; /* Add this */
+        padding: 15px;
+        background: rgba(240, 240, 240, 0.9); /* Semi-transparent */
+        z-index: 1; /* Add this */
+        text-align: center; /* Add this */
+    }
+
+    .btn {
+        padding: 12px;
+        border-radius: 6px;
+        border: none;
+        background: #007AFF;
+        color: white;
+        min-height: 44px;
+        min-width: 44px;
+        cursor: pointer;
+    }
     </style>
 </head>
 <body>
@@ -46,9 +78,14 @@
         let scanning = true;
         let currentCamera = 0;
         let videoDevices = [];
+        let wakeLock = null;
 
         async function initializeCamera() {
             try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                }
+
                 videoDevices = await (new ZXing.BrowserCodeReader()).listVideoInputDevices();
                 startScanning();
             } catch (err) {
@@ -81,9 +118,11 @@
         }
 
         function handleQRCode(data) {
+            const status = document.getElementById('status');
+
             if (data.startsWith('VIDEO QR TOTAL PARTS = ')) {
                 totalParts = parseInt(data.split('= ')[1]);
-                updateStatus();
+                status.textContent = `Found file with ${totalParts} parts. Scanning...`;
                 return;
             }
 
@@ -99,14 +138,26 @@
 
                 if (!scannedParts.has(index)) {
                     scannedParts.set(index, content);
-                    updateStatus();
+                    updateStatus(); // Make sure to call updateStatus here
                 }
 
                 if (totalParts && scannedParts.size === totalParts) {
+                    status.textContent = 'All parts received! Assembling file...';
                     assembleAndDownload();
                 }
             } catch (err) {
+                status.textContent = 'Error processing QR: ' + err.message;
                 console.error('Error processing QR data:', err);
+            }
+        }
+
+        function updateStatus() {
+            const status = document.getElementById('status');
+            if (totalParts) {
+                const progress = Math.round((scannedParts.size / totalParts) * 100);
+                status.textContent = `Progress: ${scannedParts.size}/${totalParts} parts (${progress}%)`;
+            } else {
+                status.textContent = `Scanned ${scannedParts.size} parts. Waiting for total...`;
             }
         }
 
@@ -120,7 +171,6 @@
         function assembleAndDownload() {
             scanning = false;
 
-            // Combine all parts in correct order
             const sortedParts = Array.from(scannedParts.entries())
                 .sort((a, b) => a[0] - b[0])
                 .map(entry => entry[1]);
@@ -135,7 +185,6 @@
                 offset += part.length;
             });
 
-            // Create download link
             const blob = new Blob([finalBuffer]);
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -146,6 +195,11 @@
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
         }
+
+        window.addEventListener('beforeunload', () => {
+            if (wakeLock) wakeLock.release();
+            if (codeReader) codeReader.reset();
+        });
 
         initializeCamera();
     </script>

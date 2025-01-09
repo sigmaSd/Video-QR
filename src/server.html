@@ -2,52 +2,165 @@
 <html>
 <head>
     <title>VideoQr Server</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://cdn.jsdelivr.net/npm/qrcode-generator"></script>
     <style>
-        .qr-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin: 20px;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        .qr-code {
-            border: 1px solid #ccc;
+
+        body {
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
             padding: 10px;
         }
-        #fileInput {
-            margin: 20px;
+
+        .controls {
+            padding: 10px;
+            gap: 10px;
+            display: flex;
+        }
+
+        .btn {
+            padding: 12px;
+            border-radius: 6px;
+            border: none;
+            background: #007AFF;
+            color: white;
+            min-height: 44px;
+            min-width: 44px;
+        }
+
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #f0f0f0;
+            padding: 5px 10px;
+            border-radius: 6px;
+        }
+
+        #speedSlider {
+            width: 100px;
+        }
+
+        #speedValue {
+            min-width: 30px;
+        }
+
+        #status {
+            padding: 15px;
+            margin: 10px 0;
+            background: #f0f0f0;
+            border-radius: 6px;
+        }
+
+        .qr-display {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .qr-code img {
+            max-width: 90vw;
+            height: auto;
+        }
+
+        .loading-spinner {
+            text-align: center;
         }
     </style>
 </head>
 <body>
-    <input type="file" id="fileInput">
-    <div class="qr-container" id="qrContainer"></div>
+    <div class="container">
+        <div class="controls">
+            <input type="file" id="fileInput" style="display: none">
+            <button class="btn" onclick="document.getElementById('fileInput').click()">Select File</button>
+            <div class="speed-control">
+                <input type="range" id="speedSlider" min="100" max="2000" value="1000" step="100">
+                <span id="speedValue">1s</span>
+            </div>
+            <button class="btn" onclick="location.href='index.html'">Back</button>
+        </div>
+
+        <div id="status">Ready to generate QR codes</div>
+
+        <div class="qr-display" id="qrContainer">
+            <div class="loading-spinner" id="loadingSpinner" style="display: none">
+                <div>Processing file...</div>
+            </div>
+        </div>
+    </div>
 
     <script>
-        const CHUNK_SIZE = 1000; // Adjust based on QR capacity needs
+        let wakeLock = null;
+        let cycleInterval;
+        let cycleSpeed = 1000;
+
+        async function keepScreenAwake() {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                }
+            } catch (err) {
+                console.log('Wake Lock error:', err);
+            }
+        }
+
+        const CHUNK_SIZE = 1000;
 
         async function handleFileSelect(event) {
             const file = event.target.files[0];
-            const fileBuffer = await file.arrayBuffer();
-            const chunks = splitFile(fileBuffer);
+            if (!file) return;
 
-            // Create QR codes for each chunk
+            const status = document.getElementById('status');
+            const spinner = document.getElementById('loadingSpinner');
             const qrContainer = document.getElementById('qrContainer');
-            qrContainer.innerHTML = '';
 
-            // Add total parts QR
-            const totalPartsQr = generateQR(`VIDEO QR TOTAL PARTS = ${chunks.length}`);
-            qrContainer.appendChild(createQRElement(totalPartsQr));
+            try {
+                status.textContent = 'Reading file...';
+                spinner.style.display = 'block';
+                qrContainer.innerHTML = '';
 
-            // Generate QR for each chunk
-            chunks.forEach((chunk, index) => {
-                const prefixedChunk = new Uint8Array([index, ...chunk]);
-                const qr = generateQR(arrayBufferToBase64(prefixedChunk));
-                qrContainer.appendChild(createQRElement(qr));
-            });
+                const fileBuffer = await file.arrayBuffer();
+                status.textContent = 'Generating QR codes...';
 
-            // Start cycling through QRs
-            startQRCycle();
+                const chunks = splitFile(fileBuffer);
+                status.textContent = `Creating ${chunks.length} QR codes...`;
+
+                // Add total parts QR
+                const totalPartsQr = generateQR(`VIDEO QR TOTAL PARTS = ${chunks.length}`);
+                qrContainer.appendChild(createQRElement(totalPartsQr));
+
+                // Generate QR for each chunk
+                chunks.forEach((chunk, index) => {
+                    const prefixedChunk = new Uint8Array([index, ...chunk]);
+                    const qr = generateQR(arrayBufferToBase64(prefixedChunk));
+                    qrContainer.appendChild(createQRElement(qr));
+                });
+
+                status.textContent = `Displaying ${chunks.length} QR codes`;
+                spinner.style.display = 'none';
+
+                startQRCycle();
+                keepScreenAwake();
+
+            } catch (error) {
+                status.textContent = 'Error: ' + error.message;
+                spinner.style.display = 'none';
+            }
         }
 
         function splitFile(buffer) {
@@ -79,11 +192,15 @@
             const qrs = document.querySelectorAll('.qr-code');
             let currentIndex = 0;
 
-            setInterval(() => {
+            if (cycleInterval) {
+                clearInterval(cycleInterval);
+            }
+
+            cycleInterval = setInterval(() => {
                 qrs.forEach(qr => qr.style.display = 'none');
                 qrs[currentIndex].style.display = 'block';
                 currentIndex = (currentIndex + 1) % qrs.length;
-            }, 1000); // Change QR every second
+            }, cycleSpeed);
         }
 
         function arrayBufferToBase64(buffer) {
@@ -91,7 +208,17 @@
             return btoa(String.fromCharCode.apply(null, bytes));
         }
 
+        window.addEventListener('beforeunload', () => {
+            if (wakeLock) wakeLock.release();
+            if (cycleInterval) clearInterval(cycleInterval);
+        });
+
         document.getElementById('fileInput').addEventListener('change', handleFileSelect);
+        document.getElementById('speedSlider').addEventListener('input', (e) => {
+            cycleSpeed = parseInt(e.target.value);
+            document.getElementById('speedValue').textContent = (cycleSpeed/1000).toFixed(1) + 's';
+            startQRCycle();
+        });
     </script>
 </body>
 </html>
