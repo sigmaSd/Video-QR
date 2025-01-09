@@ -4,38 +4,77 @@
     <title>VideoQr Client</title>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
+        .container {
+            max-width: 640px;
+            margin: 0 auto;
+            padding: 20px;
+        }
         #video {
             width: 100%;
-            max-width: 640px;
+            border: 1px solid #ccc;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .btn {
+            padding: 10px;
+            cursor: pointer;
         }
         #status {
-            margin: 20px;
             padding: 10px;
             background: #f0f0f0;
+            margin-top: 10px;
         }
     </style>
 </head>
 <body>
-    <video id="video"></video>
-    <div id="status">Scanning...</div>
+    <div class="container">
+        <div class="controls">
+            <button class="btn" onclick="switchCamera()">Switch Camera</button>
+            <button class="btn" onclick="location.href='index.html'">Back</button>
+        </div>
+        <video id="video"></video>
+        <div id="status">Scanning...</div>
+    </div>
 
     <script>
         let codeReader = new ZXing.BrowserQRCodeReader();
         let scannedParts = new Map();
         let totalParts = null;
         let scanning = true;
+        let currentCamera = 0;
+        let videoDevices = [];
+
+        async function initializeCamera() {
+            try {
+                videoDevices = await ZXing.BrowserCodeReader.listVideoInputDevices();
+                startScanning();
+            } catch (err) {
+                console.error('Camera init error:', err);
+                document.getElementById('status').textContent = 'Camera error: ' + err.message;
+            }
+        }
+
+        async function switchCamera() {
+            if (videoDevices.length <= 1) {
+                alert('No alternative cameras found');
+                return;
+            }
+            currentCamera = (currentCamera + 1) % videoDevices.length;
+            await codeReader.reset();
+            startScanning();
+        }
 
         async function startScanning() {
             try {
-                const videoInputDevices = await (new ZXing.BrowserCodeReader()).listVideoInputDevices();
-                const selectedDeviceId = videoInputDevices[0].deviceId;
-
+                const selectedDeviceId = videoDevices[currentCamera].deviceId;
                 codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
                     if (result && scanning) {
                         handleQRCode(result.text);
                     }
                 });
-
             } catch (err) {
                 console.error(err);
             }
@@ -108,7 +147,7 @@
             URL.revokeObjectURL(url);
         }
 
-        startScanning();
+        initializeCamera();
     </script>
 </body>
 </html>
